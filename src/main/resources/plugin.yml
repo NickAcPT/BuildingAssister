@@ -1,0 +1,9 @@
+name: BuildingAssister
+main: io.github.nickacpt.buildingassister.BuildingAssisterPlugin
+version: 1.0.0-SNAPSHOT
+api-version: 1.17
+
+permissions:
+  buildingassister.use:
+    default: op
+    description: "Allows players to use BuildingAssister"

@@ -38,7 +38,6 @@ public class BlockListener implements Listener {
 
         Location blockPos = changedBlock.getLocation().toCenterLocation();
         List<RotatedLocation> toPlaceLocations = new ArrayList<>();
-        var existingDirection = getBlockDataDirection(changedBlock, blockData);
         toPlaceLocations.add(new RotatedLocation(blockPos, RotationAxis.SELF));
 
         if (settings.rotateXAxis()) MirrorUtils.rotateX(settings, blockPos.toCenterLocation(), toPlaceLocations);

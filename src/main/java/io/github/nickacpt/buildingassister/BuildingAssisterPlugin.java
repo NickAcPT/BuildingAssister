@@ -1,5 +1,6 @@
 package io.github.nickacpt.buildingassister;
 
+import io.github.nickacpt.buildingassister.commands.MirrorCommandExecutor;
 import io.github.nickacpt.buildingassister.listeners.BlockListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -7,6 +8,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class BuildingAssisterPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
+        Bukkit.getPluginCommand("mirror").setExecutor(new MirrorCommandExecutor());
         Bukkit.getPluginManager().registerEvents(new BlockListener(), this);
     }
 

@@ -7,3 +7,8 @@ permissions:
   buildingassister.use:
     default: op
     description: "Allows players to use BuildingAssister"
+
+commands:
+  mirror:
+    permission: buildingassister.use
+    permission-message: "You are not allowed to use this."

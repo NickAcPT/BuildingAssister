@@ -15,18 +15,21 @@ public class MirrorLogic {
     public static void performBlockChangeMirror(Player player, @NotNull Block changedBlock, @NotNull BlockData blockData) {
         var settings = PlayerMirrorSettingsStorage.getPlayerMirrorSettingsV2(player);
         if (!settings.enabled()) return;
+        Location centerLocation = settings.centerLocation();
+        if (centerLocation == null) return;
 
         EnumSet<MirrorAxis> axisToMirror = settings.axisToMirror();
         Set<Vector> finalLocations = new HashSet<>();
 
-        BlockVector originalLocation = new BlockVector(changedBlock.getX(), changedBlock.getY(), changedBlock.getZ());
+        Vector centerLocationVect = centerLocation.toCenterLocation().toVector();
+        BlockVector originalLocation = changedBlock.getLocation().toCenterLocation().subtract(centerLocationVect).toVector()
+                .toBlockVector();
         finalLocations.add(originalLocation);
 
-        int expectedLocations = Math.max(axisToMirror.size() * 2, 1);
-        int recursionTries = 0;
+        int maxTries = axisToMirror.size();
 
-        while (finalLocations.size() >= expectedLocations && recursionTries <= 50) {
-            for (Vector blockLocation : finalLocations) {
+        for (int i = 0; i < maxTries; i++) {
+            for (Vector blockLocation : Set.copyOf(finalLocations)) {
                 for (MirrorAxis mirrorAxis : axisToMirror) {
                     Vector newVector = blockLocation.clone();
 
@@ -40,23 +43,20 @@ public class MirrorLogic {
                         case Z -> {
                             newVector.setZ(blockLocation.getZ() * -1);
                         }
-                        case XZ, ZX -> {
-                            throw new RuntimeException("Not implemented");
+                        case ZX -> {
+                            newVector.setX(newVector.getZ());
+                        }
+                        case XZ -> {
+                            newVector.setZ(newVector.getZ());
                         }
                     }
                     finalLocations.add(newVector);
                 }
             }
-            recursionTries++;
         }
 
-
         finalLocations.forEach(v -> {
-            Location location = v.toLocation(changedBlock.getWorld()).toCenterLocation();
-            changedBlock.getWorld().setBlockData(location, blockData);
+            changedBlock.getWorld().setBlockData(v.add(centerLocationVect).toLocation(changedBlock.getWorld()), blockData);
         });
-
     }
-
-
 }

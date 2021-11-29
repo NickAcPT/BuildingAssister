@@ -43,11 +43,15 @@ public class MirrorLogic {
                         case Z -> {
                             newVector.setZ(blockLocation.getZ() * -1);
                         }
-                        case ZX -> {
+                        case ZX, XZ -> {
+                            var oldX = newVector.getX();
                             newVector.setX(newVector.getZ());
-                        }
-                        case XZ -> {
-                            newVector.setZ(newVector.getZ());
+                            newVector.setZ(oldX);
+
+                            if (mirrorAxis == MirrorAxis.XZ) {
+                                newVector.setX(newVector.getX() * -1);
+                                newVector.setZ(newVector.getZ() * -1);
+                            }
                         }
                     }
                     finalLocations.add(newVector);

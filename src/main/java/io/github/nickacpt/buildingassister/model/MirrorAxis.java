@@ -5,5 +5,9 @@ public enum MirrorAxis {
     Y,
     Z,
     XZ,
-    ZX
+    ZX;
+
+    public static MirrorAxis[] getMainAxis() {
+        return new MirrorAxis[] {X, Y, Z};
+    }
 }

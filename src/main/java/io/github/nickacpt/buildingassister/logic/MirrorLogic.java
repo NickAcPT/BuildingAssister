@@ -82,8 +82,6 @@ public class MirrorLogic {
                                 rotations.add(Rotation.COUNTERCLOCKWISE_90);
                                 mirrors.add(Mirror.FRONT_BACK);
                             }
-
-
                         }
                     }
                     var existing = finalLocations.stream().filter(it -> it.vector().equals(newVector)).findFirst()
@@ -107,7 +105,7 @@ public class MirrorLogic {
             changedBlock.getWorld().setBlockData(location, blockData);
 
             CraftBlockState blockState = (CraftBlockState) changedBlock.getWorld().getBlockState(location);
-            player.sendMessage(Component.text(finalPlacedFace.toString()));
+            //player.sendMessage(Component.text(finalPlacedFace.toString()));
             //player.sendMessage(Component.text(blockData.toString()));
 
             for (Rotation rotation : loc.rotations()) blockState.setData(blockState.getHandle().rotate(rotation));

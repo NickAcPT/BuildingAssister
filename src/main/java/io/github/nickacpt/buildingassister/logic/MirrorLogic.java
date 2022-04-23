@@ -6,8 +6,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -69,19 +71,27 @@ public class MirrorLogic {
                             var oldX = newVector.getX();
                             newVector.setX(newVector.getZ());
                             newVector.setZ(oldX);
+                            //mirrors.add(Mirror.FRONT_BACK);
+                            //mirrors.add(Mirror.LEFT_RIGHT);
 
-                            if (mirrorAxis == MirrorAxis.XZ) {
+
+                            /*if (mirrorAxis == MirrorAxis.XZ) {
                                 newVector.setX(newVector.getX() * -1);
                                 newVector.setZ(newVector.getZ() * -1);
-                            }
 
-                            if (placedFace.getModZ() == 0) {
+                            }
+                            rotations.add(mirrorAxis == MirrorAxis.XZ ? Rotation.COUNTERCLOCKWISE_90 : Rotation.CLOCKWISE_90);
+
+                            boolean isModValue = (mirrorAxis == MirrorAxis.ZX ? placedFace.getModZ() : placedFace.getModX()) != 0;
+                            mirrors.add(isModValue ? Mirror.FRONT_BACK : Mirror.LEFT_RIGHT);
+                            if (!isModValue) rotations.add(Rotation.CLOCKWISE_180);
+
+                            /*if (placedFace.getModZ() == 0) {
                                 rotations.add(Rotation.CLOCKWISE_90);
                                 mirrors.add(Mirror.LEFT_RIGHT);
                             } else {
                                 rotations.add(Rotation.COUNTERCLOCKWISE_90);
-                                mirrors.add(Mirror.FRONT_BACK);
-                            }
+                            }*/
                         }
                     }
                     var existing = finalLocations.stream().filter(it -> it.vector().equals(newVector)).findFirst()
@@ -111,6 +121,8 @@ public class MirrorLogic {
             for (Rotation rotation : loc.rotations()) blockState.setData(blockState.getHandle().rotate(rotation));
             for (Mirror mirror : loc.mirrors()) blockState.setData(blockState.getHandle().mirror(mirror));
 
+            //blockState.setData(rotateBlockState(v, blockState.getHandle(), true));
+
             String mirrorsDebug = loc.mirrors().stream().map(Enum::name).collect(
                     Collectors.joining(", "));
             TextComponent rotationsDebug = Component.text(loc.rotations().stream().map(Enum::name).collect(
@@ -122,4 +134,34 @@ public class MirrorLogic {
             blockState.update(true, true);
         });
     }
+
+    private static BlockState rotateBlockState(Vector relVec, BlockState blockState, boolean alternate) {
+        BlockState newBlockState;
+        double angleToCenter = Mth.atan2(relVec.getX(), relVec.getZ()); //between -PI and PI
+
+        if (angleToCenter < -0.751 * Math.PI || angleToCenter > 0.749 * Math.PI) {
+            newBlockState = blockState.rotate(Rotation.CLOCKWISE_180);
+            if (alternate) {
+                newBlockState = newBlockState.mirror(Mirror.FRONT_BACK);
+            }
+        } else if (angleToCenter < -0.251 * Math.PI) {
+            newBlockState = blockState.rotate(Rotation.CLOCKWISE_90);
+            if (alternate) {
+                newBlockState = newBlockState.mirror(Mirror.LEFT_RIGHT);
+            }
+        } else if (angleToCenter > 0.249 * Math.PI) {
+            newBlockState = blockState.rotate(Rotation.COUNTERCLOCKWISE_90);
+            if (alternate) {
+                newBlockState = newBlockState.mirror(Mirror.LEFT_RIGHT);
+            }
+        } else {
+            newBlockState = blockState;
+            if (alternate) {
+                newBlockState = newBlockState.mirror(Mirror.FRONT_BACK);
+            }
+        }
+
+        return newBlockState;
+    }
+
 }

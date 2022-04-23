@@ -13,7 +13,9 @@ public class BlockListener implements Listener {
     @EventHandler
     public void onPlaceBlock(BlockPlaceEvent e) {
         if (e.isCancelled()) return;
-        MirrorLogic.performBlockChangeMirror(e.getPlayer(), e.getBlock(), e.getBlock().getBlockData());
+        //Bukkit.getScheduler().runTaskLater(JavaPlugin.getPlugin(BuildingAssisterPlugin.class), () -> {
+            MirrorLogic.performBlockChangeMirror(e.getPlayer(), e.getBlock(), e.getBlock().getBlockData());
+        //}, 10);
     }
 
     @EventHandler

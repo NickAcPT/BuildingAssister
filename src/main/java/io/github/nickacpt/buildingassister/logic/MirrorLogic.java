@@ -1,12 +1,14 @@
 package io.github.nickacpt.buildingassister.logic;
 
+import com.mojang.math.OctahedralGroup;
 import io.github.nickacpt.buildingassister.model.MirrorAxis;
 import io.github.nickacpt.buildingassister.model.PlayerMirrorSettingsStorage;
 import java.util.*;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.minecraft.util.Mth;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,15 +17,18 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
-import org.bukkit.craftbukkit.v1_17_R1.block.CraftBlockState;
+import org.bukkit.craftbukkit.v1_18_R2.block.CraftBlock;
+import org.bukkit.craftbukkit.v1_18_R2.block.CraftBlockState;
+import org.bukkit.craftbukkit.v1_18_R2.block.data.CraftDirectional;
+import org.bukkit.craftbukkit.v1_18_R2.util.CraftMagicNumbers;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BlockVector;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
-record VectorWithBlockRotation(Vector vector, EnumSet<Mirror> mirrors, EnumSet<Rotation> rotations) {
+record VectorWithBlockRotation(Vector vector, EnumSet<Mirror> mirrors, EnumSet<Rotation> rotations, EnumSet<OctahedralGroup> octahedralGroups) {
     public VectorWithBlockRotation(Vector vector) {
-        this(vector, EnumSet.noneOf(Mirror.class), EnumSet.noneOf(Rotation.class));
+        this(vector, EnumSet.noneOf(Mirror.class), EnumSet.noneOf(Rotation.class), EnumSet.noneOf(OctahedralGroup.class));
     }
 }
 
@@ -52,6 +57,7 @@ public class MirrorLogic {
                 for (MirrorAxis mirrorAxis : axisToMirror) {
                     Vector blockLocation = vectorWithBlockRotation.vector();
                     Vector newVector = blockLocation.clone();
+                    EnumSet<OctahedralGroup> octahedralGroups = EnumSet.noneOf(OctahedralGroup.class);
                     EnumSet<Mirror> mirrors = EnumSet.noneOf(Mirror.class);
                     EnumSet<Rotation> rotations = EnumSet.noneOf(Rotation.class);
 
@@ -71,27 +77,19 @@ public class MirrorLogic {
                             var oldX = newVector.getX();
                             newVector.setX(newVector.getZ());
                             newVector.setZ(oldX);
-                            //mirrors.add(Mirror.FRONT_BACK);
-                            //mirrors.add(Mirror.LEFT_RIGHT);
 
+                            BlockFace face = blockData instanceof Directional ? ((Directional) blockData).getFacing() : BlockFace.SELF;
 
-                            /*if (mirrorAxis == MirrorAxis.XZ) {
-                                newVector.setX(newVector.getX() * -1);
-                                newVector.setZ(newVector.getZ() * -1);
+                            int mod = (mirrorAxis.getLeadingAxis() == MirrorAxis.X) ? face.getModX() : face.getModZ();
 
-                            }
-                            rotations.add(mirrorAxis == MirrorAxis.XZ ? Rotation.COUNTERCLOCKWISE_90 : Rotation.CLOCKWISE_90);
+                            player.sendMessage(Component.text(mod));
 
-                            boolean isModValue = (mirrorAxis == MirrorAxis.ZX ? placedFace.getModZ() : placedFace.getModX()) != 0;
-                            mirrors.add(isModValue ? Mirror.FRONT_BACK : Mirror.LEFT_RIGHT);
-                            if (!isModValue) rotations.add(Rotation.CLOCKWISE_180);
-
-                            /*if (placedFace.getModZ() == 0) {
-                                rotations.add(Rotation.CLOCKWISE_90);
-                                mirrors.add(Mirror.LEFT_RIGHT);
+                            if (mirrorAxis.getLeadingAxis() == MirrorAxis.X) {
+                                mirrors.add(mod == 0 ? Mirror.LEFT_RIGHT : Mirror.FRONT_BACK);
+                                octahedralGroups.add(OctahedralGroup.SWAP_NEG_XZ);
                             } else {
-                                rotations.add(Rotation.COUNTERCLOCKWISE_90);
-                            }*/
+                                octahedralGroups.add(OctahedralGroup.SWAP_XZ);
+                            }
                         }
                     }
                     var existing = finalLocations.stream().filter(it -> it.vector().equals(newVector)).findFirst()
@@ -99,14 +97,14 @@ public class MirrorLogic {
                     if (existing != null) {
                         existing.mirrors().addAll(mirrors);
                         existing.rotations().addAll(rotations);
+                        existing.octahedralGroups().addAll(octahedralGroups);
                     } else {
-                        finalLocations.add(new VectorWithBlockRotation(newVector, mirrors, rotations));
+                        finalLocations.add(new VectorWithBlockRotation(newVector, mirrors, rotations, octahedralGroups));
                     }
                 }
             }
         }
 
-        BlockFace finalPlacedFace = placedFace;
         finalLocations.forEach(loc -> {
             if (loc.vector().equals(originalLocation)) return;
 
@@ -114,54 +112,41 @@ public class MirrorLogic {
             Location location = v.add(centerLocationVect).toLocation(changedBlock.getWorld());
             changedBlock.getWorld().setBlockData(location, blockData);
 
-            CraftBlockState blockState = (CraftBlockState) changedBlock.getWorld().getBlockState(location);
-            //player.sendMessage(Component.text(finalPlacedFace.toString()));
-            //player.sendMessage(Component.text(blockData.toString()));
+            org.bukkit.block.BlockState originalBlockState = changedBlock.getWorld().getBlockState(location);
+            CraftBlockState craftBlockState = (CraftBlockState) originalBlockState;
 
-            for (Rotation rotation : loc.rotations()) blockState.setData(blockState.getHandle().rotate(rotation));
-            for (Mirror mirror : loc.mirrors()) blockState.setData(blockState.getHandle().mirror(mirror));
+            BlockState finalNmsState = craftBlockState.getHandle();
 
-            //blockState.setData(rotateBlockState(v, blockState.getHandle(), true));
+            for (Mirror mirror : loc.mirrors()) finalNmsState = finalNmsState.mirror(mirror);
+            for (Rotation rotation : loc.rotations()) finalNmsState = finalNmsState.rotate(rotation);
+
+            craftBlockState.setData(finalNmsState);
+
+            BlockData finalBlockData = craftBlockState.getBlockData();
+            if (finalBlockData instanceof Directional directional) {
+                Direction finalNmsDirection = CraftBlock.blockFaceToNotch(directional.getFacing());
+
+                for (OctahedralGroup octahedralGroup : loc.octahedralGroups()) finalNmsDirection = octahedralGroup.rotate(finalNmsDirection);
+
+                directional.setFacing(CraftBlock.notchToBlockFace(finalNmsDirection));
+
+                craftBlockState.setBlockData(finalBlockData);
+            }
 
             String mirrorsDebug = loc.mirrors().stream().map(Enum::name).collect(
                     Collectors.joining(", "));
             TextComponent rotationsDebug = Component.text(loc.rotations().stream().map(Enum::name).collect(
                     Collectors.joining(", ")));
-            TextComponent debug = Component.text(mirrorsDebug).append(Component.text(", ").append(rotationsDebug));
-            //player.sendMessage(debug.clickEvent(ClickEvent.runCommand(
-             //               "/tp " + location.getX() + " " + location.getY() + " " + location.getZ() + " ")));
+            TextComponent octahedralGroupsDebug = Component.text(loc.octahedralGroups().stream().map(Enum::name).collect(
+                    Collectors.joining(", ")));
+            TextComponent debug = Component.text(mirrorsDebug)
+                    .append(Component.text(", ").append(rotationsDebug))
+                    .append(Component.text(", ").append(octahedralGroupsDebug));
+            player.sendMessage(debug.clickEvent(ClickEvent.runCommand(
+                    "/tp " + location.getX() + " " + location.getY() + " " + location.getZ() + " ")));
 
-            blockState.update(true, true);
+            craftBlockState.update(true, true);
         });
-    }
-
-    private static BlockState rotateBlockState(Vector relVec, BlockState blockState, boolean alternate) {
-        BlockState newBlockState;
-        double angleToCenter = Mth.atan2(relVec.getX(), relVec.getZ()); //between -PI and PI
-
-        if (angleToCenter < -0.751 * Math.PI || angleToCenter > 0.749 * Math.PI) {
-            newBlockState = blockState.rotate(Rotation.CLOCKWISE_180);
-            if (alternate) {
-                newBlockState = newBlockState.mirror(Mirror.FRONT_BACK);
-            }
-        } else if (angleToCenter < -0.251 * Math.PI) {
-            newBlockState = blockState.rotate(Rotation.CLOCKWISE_90);
-            if (alternate) {
-                newBlockState = newBlockState.mirror(Mirror.LEFT_RIGHT);
-            }
-        } else if (angleToCenter > 0.249 * Math.PI) {
-            newBlockState = blockState.rotate(Rotation.COUNTERCLOCKWISE_90);
-            if (alternate) {
-                newBlockState = newBlockState.mirror(Mirror.LEFT_RIGHT);
-            }
-        } else {
-            newBlockState = blockState;
-            if (alternate) {
-                newBlockState = newBlockState.mirror(Mirror.FRONT_BACK);
-            }
-        }
-
-        return newBlockState;
     }
 
 }

@@ -1,7 +1,7 @@
 plugins {
     java
-    id("xyz.jpenilla.run-paper") version "1.0.4"
-    id("io.papermc.paperweight.userdev") version "1.2.0"
+    id("xyz.jpenilla.run-paper") version "1.0.6"
+    id("io.papermc.paperweight.userdev") version "1.3.7-SNAPSHOT"
     id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
@@ -13,7 +13,7 @@ repositories {
 }
 
 dependencies {
-    paperDevBundle("1.17.1-R0.1-SNAPSHOT")
+    compileOnly(paperDevBundle("1.18.2-R0.1-SNAPSHOT"))
     implementation("com.github.stefvanschie.inventoryframework:IF:0.10.3")
 }
 
@@ -23,6 +23,6 @@ tasks {
         dependsOn(shadowJar)
     }
     runServer {
-        minecraftVersion("1.17.1")
+        minecraftVersion("1.18.2")
     }
 }

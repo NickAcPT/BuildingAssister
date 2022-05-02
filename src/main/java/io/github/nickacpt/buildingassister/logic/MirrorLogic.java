@@ -7,7 +7,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
@@ -19,16 +20,18 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
 import org.bukkit.craftbukkit.v1_18_R2.block.CraftBlock;
 import org.bukkit.craftbukkit.v1_18_R2.block.CraftBlockState;
-import org.bukkit.craftbukkit.v1_18_R2.block.data.CraftDirectional;
-import org.bukkit.craftbukkit.v1_18_R2.util.CraftMagicNumbers;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BlockVector;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-record VectorWithBlockRotation(Vector vector, EnumSet<Mirror> mirrors, EnumSet<Rotation> rotations, EnumSet<OctahedralGroup> octahedralGroups) {
-    public VectorWithBlockRotation(Vector vector) {
-        this(vector, EnumSet.noneOf(Mirror.class), EnumSet.noneOf(Rotation.class), EnumSet.noneOf(OctahedralGroup.class));
+record VectorWithBlockRotation(@Nullable MirrorAxis axis, Vector vector, EnumSet<Mirror> mirrors,
+                               EnumSet<Rotation> rotations,
+                               EnumSet<OctahedralGroup> octahedralGroups, @Nullable VectorWithBlockRotation source) {
+    public VectorWithBlockRotation(@Nullable MirrorAxis axis, Vector vector) {
+        this(axis, vector, EnumSet.noneOf(Mirror.class), EnumSet.noneOf(Rotation.class),
+                EnumSet.noneOf(OctahedralGroup.class), null);
     }
 }
 
@@ -46,15 +49,18 @@ public class MirrorLogic {
         BlockVector originalLocation = changedBlock.getLocation().toCenterLocation().subtract(centerLocationVect)
                 .toVector()
                 .toBlockVector();
-        finalLocations.add(new VectorWithBlockRotation(originalLocation));
+        finalLocations.add(new VectorWithBlockRotation(null, originalLocation));
 
-        int maxTries = axisToMirror.size();
+        int maxTries = axisToMirror.size() + 1;
         BlockFace placedFace = BlockFace.SELF;
         if (blockData instanceof Directional) placedFace = ((Directional) blockData).getFacing();
 
         for (int i = 0; i < maxTries; i++) {
             for (VectorWithBlockRotation vectorWithBlockRotation : Set.copyOf(finalLocations)) {
-                for (MirrorAxis mirrorAxis : axisToMirror) {
+                List<MirrorAxis> mirrorAxes = new ArrayList<>(axisToMirror);
+                mirrorAxes.sort(Comparator.comparingInt(MirrorAxis::ordinal));
+
+                for (MirrorAxis mirrorAxis : mirrorAxes) {
                     Vector blockLocation = vectorWithBlockRotation.vector();
                     Vector newVector = blockLocation.clone();
                     EnumSet<OctahedralGroup> octahedralGroups = EnumSet.noneOf(OctahedralGroup.class);
@@ -82,8 +88,6 @@ public class MirrorLogic {
 
                             int mod = (mirrorAxis.getLeadingAxis() == MirrorAxis.X) ? face.getModX() : face.getModZ();
 
-                            player.sendMessage(Component.text(mod));
-
                             if (mirrorAxis.getLeadingAxis() == MirrorAxis.X) {
                                 mirrors.add(mod == 0 ? Mirror.LEFT_RIGHT : Mirror.FRONT_BACK);
                                 octahedralGroups.add(OctahedralGroup.SWAP_NEG_XZ);
@@ -99,7 +103,9 @@ public class MirrorLogic {
                         existing.rotations().addAll(rotations);
                         existing.octahedralGroups().addAll(octahedralGroups);
                     } else {
-                        finalLocations.add(new VectorWithBlockRotation(newVector, mirrors, rotations, octahedralGroups));
+                        finalLocations.add(
+                                new VectorWithBlockRotation(mirrorAxis, newVector, mirrors, rotations, octahedralGroups,
+                                        vectorWithBlockRotation));
                     }
                 }
             }
@@ -126,7 +132,8 @@ public class MirrorLogic {
             if (finalBlockData instanceof Directional directional) {
                 Direction finalNmsDirection = CraftBlock.blockFaceToNotch(directional.getFacing());
 
-                for (OctahedralGroup octahedralGroup : loc.octahedralGroups()) finalNmsDirection = octahedralGroup.rotate(finalNmsDirection);
+                for (OctahedralGroup octahedralGroup : loc.octahedralGroups())
+                    finalNmsDirection = octahedralGroup.rotate(finalNmsDirection);
 
                 directional.setFacing(CraftBlock.notchToBlockFace(finalNmsDirection));
 
@@ -137,13 +144,37 @@ public class MirrorLogic {
                     Collectors.joining(", "));
             TextComponent rotationsDebug = Component.text(loc.rotations().stream().map(Enum::name).collect(
                     Collectors.joining(", ")));
-            TextComponent octahedralGroupsDebug = Component.text(loc.octahedralGroups().stream().map(Enum::name).collect(
-                    Collectors.joining(", ")));
-            TextComponent debug = Component.text(mirrorsDebug)
-                    .append(Component.text(", ").append(rotationsDebug))
-                    .append(Component.text(", ").append(octahedralGroupsDebug));
-            player.sendMessage(debug.clickEvent(ClickEvent.runCommand(
-                    "/tp " + location.getX() + " " + location.getY() + " " + location.getZ() + " ")));
+            TextComponent octahedralGroupsDebug = Component.text(
+                    loc.octahedralGroups().stream().map(Enum::name).collect(
+                            Collectors.joining(", ")));
+
+
+            Component debug = MiniMessage.miniMessage().deserialize(
+                    "<blue>Debug></blue> <gold>Placed <mirror_block> mirrored from <src_block> <red>(<axis><red>)",
+
+                    Placeholder.parsed("mirror_block",
+
+                            "<click:run_command:" +
+                                    "'/tp " + location.getX() + " " + location.getY() + " " + location.getZ() + "'" +
+                                    "><yellow>[Block]</yellow></click>"
+                    ),
+
+                    Placeholder.parsed("src_block",
+                                    (loc.source() != null ? ("<click:run_command:'/tp " + loc.source().vector().getX() + " " + loc.source()
+                                            .vector().getY() + " " + loc.source().vector()
+                                            .getZ() + "'") : "<hover:'<red>Unknown source'") +
+                                    "><yellow>[Mirror Source]</yellow>"
+                    ),
+
+                    Placeholder.parsed("axis",
+                            "<yellow>" + (loc.axis() != null ? loc.axis().name() : "Original Block") + ""
+                    )
+            );
+
+            //TextComponent debug =
+            // Placed [Block] sourced [Mirror]
+
+            //player.sendMessage(debug);
 
             craftBlockState.update(true, true);
         });
